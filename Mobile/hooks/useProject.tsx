@@ -9,9 +9,15 @@ import {
   SetStateAction,
 } from "react";
 
+interface Project {
+  _id: string;
+  name?: string;
+  description?: string;
+}
+
 type ProjectContextType = {
-  project: {} | null;
-  setProject: Dispatch<SetStateAction<{} | null>>;
+  project: Project | null;
+  setProject: Dispatch<SetStateAction<Project | null>>;
   role: string;
   setRole: Dispatch<SetStateAction<string>>;
 };
@@ -19,7 +25,7 @@ type ProjectContextType = {
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
-  const [project, setProject] = useState<{} | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
   const [role, setRole] = useState<string>(USER_ROLES.MEMBER);
 
   return (

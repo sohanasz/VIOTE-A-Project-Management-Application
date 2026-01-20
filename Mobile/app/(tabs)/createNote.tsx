@@ -9,6 +9,8 @@ import TextEditor from "@/components/TextEditor";
 import { showAlert } from "@/lib/showAlert";
 
 const PROJECT_ID_SESSION_KEY = "ACTIVE_PROJECT_ID";
+const NOTE_ID_SESSION_KEY = "ACTIVE_NOTE_ID";
+const NOTE_MODE_SESSION_KEY = "NOTE_EDIT_MODE";
 
 const CreateNote = () => {
   const { colors } = useTheme();
@@ -16,8 +18,12 @@ const CreateNote = () => {
   const { note, setNote, noteTitle, setNoteTitle, updateNoteCB, noteId } =
     useNote();
 
-  // 🔹 Local projectId state (decoupled from project document)
+  /* -----------------------------------------
+     Local persisted identifiers (web-safe)
+  ------------------------------------------ */
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState<boolean>(false);
 
   /* -----------------------------------------
      Sync project._id → local state + storage
@@ -33,15 +39,45 @@ const CreateNote = () => {
   }, [project?._id]);
 
   /* -----------------------------------------
-     Restore projectId on reload (WEB ONLY)
+     Sync noteId, updateNoteCB → local state + storage
+     (only when updating)
+  ------------------------------------------ */
+  useEffect(() => {
+    if (updateNoteCB !== true) return;
+    if (!noteId) return;
+
+    setActiveNoteId(noteId);
+    setIsEditMode(true);
+
+    if (Platform.OS === "web") {
+      sessionStorage.setItem(NOTE_ID_SESSION_KEY, noteId);
+      sessionStorage.setItem(NOTE_MODE_SESSION_KEY, "true");
+    }
+  }, [updateNoteCB, noteId]);
+
+  /* -----------------------------------------
+     Restore identifiers on reload (WEB ONLY)
   ------------------------------------------ */
   useEffect(() => {
     if (Platform.OS !== "web") return;
-    if (activeProjectId) return;
 
-    const cachedId = sessionStorage.getItem(PROJECT_ID_SESSION_KEY);
-    if (cachedId) {
-      setActiveProjectId(cachedId);
+    if (!activeProjectId) {
+      const cachedProjectId = sessionStorage.getItem(PROJECT_ID_SESSION_KEY);
+      if (cachedProjectId) {
+        setActiveProjectId(cachedProjectId);
+      }
+    }
+
+    // Restore edit mode flag
+    const cachedEditMode = sessionStorage.getItem(NOTE_MODE_SESSION_KEY);
+    if (cachedEditMode === "true") {
+      setIsEditMode(true);
+
+      // Also restore the note ID
+      const cachedNoteId = sessionStorage.getItem(NOTE_ID_SESSION_KEY);
+      if (cachedNoteId) {
+        setActiveNoteId(cachedNoteId);
+      }
     }
   }, []);
 
@@ -64,6 +100,8 @@ const CreateNote = () => {
 
       if (Platform.OS === "web") {
         sessionStorage.removeItem(PROJECT_ID_SESSION_KEY);
+        sessionStorage.removeItem(NOTE_ID_SESSION_KEY);
+        sessionStorage.removeItem(NOTE_MODE_SESSION_KEY);
       }
 
       router.back();
@@ -77,18 +115,21 @@ const CreateNote = () => {
      Update existing note
   ------------------------------------------ */
   const handleUpdate = async (): Promise<void> => {
-    if (!activeProjectId) {
-      showAlert("Notes not updated", "Please select a project before saving.");
+    if (!activeProjectId || !activeNoteId) {
+      showAlert(
+        "Notes not updated",
+        "Required identifiers are missing. Please reopen the note.",
+      );
       return;
     }
 
     try {
       const res = await api.put(
-        `/projects/${activeProjectId}/notes/${noteId}`,
+        `/projects/${activeProjectId}/notes/${activeNoteId}`,
         {
           title: noteTitle,
           content: note,
-        }
+        },
       );
 
       if (res.status === 200) {
@@ -96,6 +137,8 @@ const CreateNote = () => {
 
         if (Platform.OS === "web") {
           sessionStorage.removeItem(PROJECT_ID_SESSION_KEY);
+          sessionStorage.removeItem(NOTE_ID_SESSION_KEY);
+          sessionStorage.removeItem(NOTE_MODE_SESSION_KEY);
         }
 
         router.back();
@@ -108,7 +151,7 @@ const CreateNote = () => {
 
   return (
     <TextEditor
-      onSave={updateNoteCB ? handleUpdate : handleSave}
+      onSave={isEditMode ? handleUpdate : handleSave}
       notesTitle={noteTitle}
       setNotesTitle={setNoteTitle}
       notes={note}

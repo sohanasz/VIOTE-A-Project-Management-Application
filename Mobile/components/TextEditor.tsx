@@ -24,9 +24,39 @@ import {
   Heading,
   Paragraph,
 } from "@/lib/classes/Block";
+import { ColorScheme } from "@/hooks/useTheme";
 import { router } from "expo-router";
 
 const SESSION_KEY = "TEXT_EDITOR_DRAFT";
+
+interface Block {
+  id: number;
+  blockType: "heading" | "paragraph" | "bulletList" | "numericList";
+  text: string | BulletPoint[];
+  textInputHeight: number;
+  currentBulletPointId?: number | null;
+  isFocused?: boolean;
+  meta?: Record<string, unknown>;
+}
+
+interface TextEditorProps {
+  notesTitle: string;
+  setNotesTitle: (title: string) => void;
+  notes: Block[];
+  setNotes: (notes: Block[] | ((prev: Block[]) => Block[])) => void;
+  colors: ColorScheme;
+  onSave: () => Promise<void>;
+  setOnSaveError?: (error: unknown) => void;
+}
+
+interface EditorDraft {
+  notesTitle: string;
+  notes: Block[];
+}
+
+interface RenderBlockProps {
+  item: Block;
+}
 
 const TextEditor = ({
   notesTitle,
@@ -36,18 +66,21 @@ const TextEditor = ({
   colors,
   onSave,
   setOnSaveError,
-}) => {
+}: TextEditorProps) => {
   const styles = createCreateNoteStyles(colors);
+  const fetchCacheRef = useRef<boolean>(true);
 
-  const [currentBlockCreationType, setCurrentBlockCreationType] =
-    useState("heading");
+  const [currentBlockCreationType, setCurrentBlockCreationType] = useState<
+    "heading" | "paragraph" | "bulletList" | "numericList"
+  >("heading");
   const [blockId, setBlockId] = useState<number>(0);
-  const [currentBlockToEdit, setCurrentBlockToEdit] = useState({});
-  const [currentInputText, setCurrentInputText] = useState("");
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [documentUpdateRender, setDocumentUpdateRender] = useState(0);
-  const fetchCache = useRef(true);
+  const [currentBlockToEdit, setCurrentBlockToEdit] = useState<
+    Block | Record<string, never>
+  >({});
+  const [currentInputText, setCurrentInputText] = useState<string>("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [documentUpdateRender, setDocumentUpdateRender] = useState<number>(0);
 
   useEffect(() => {
     if (notes && notes.length > 0) {
@@ -58,12 +91,48 @@ const TextEditor = ({
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
-    if (fetchCache.current) return;
+    if (!fetchCacheRef.current) return;
+    fetchCacheRef.current = false;
 
-    const payload = {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+
+      const parsed: unknown = JSON.parse(raw);
+
+      if (parsed && typeof parsed === "object" && "notes" in parsed) {
+        const parsedDraft = parsed as EditorDraft;
+        if (Array.isArray(parsedDraft.notes)) {
+          setNotes(parsedDraft.notes);
+        }
+      }
+
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "notesTitle" in parsed &&
+        typeof parsed.notesTitle === "string"
+      ) {
+        setNotesTitle(parsed.notesTitle);
+      }
+    } catch (e) {
+      console.warn("Failed to restore editor draft", e);
+    }
+  }, [setNotes, setNotesTitle]);
+
+  useEffect(() => {
+    console.log("HEllo There");
+
+    if (Platform.OS !== "web") return;
+    console.log("HEllo There 1", fetchCacheRef.current);
+    if (fetchCacheRef.current) return;
+    console.log("HEllo There 2");
+
+    const payload: EditorDraft = {
       notesTitle,
       notes: Array.isArray(notes) ? notes : [],
     };
+    console.log("HEllo There 3", notes);
 
     try {
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
@@ -72,30 +141,9 @@ const TextEditor = ({
     }
   }, [notesTitle, notes, documentUpdateRender]);
 
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    if (!fetchCache.current) return;
-    fetchCache.current = false;
-
-    try {
-      const raw = sessionStorage.getItem(SESSION_KEY);
-      if (!raw) return;
-
-      const parsed = JSON.parse(raw);
-
-      if (parsed?.notes && Array.isArray(parsed.notes)) {
-        setNotes(parsed.notes);
-      }
-
-      if (typeof parsed?.notesTitle === "string") {
-        setNotesTitle(parsed.notesTitle);
-      }
-    } catch (e) {
-      console.warn("Failed to restore editor draft", e);
-    }
-  }, []);
-
-  const getBlockTypeText = (type) => {
+  const getBlockTypeText = (
+    type: "heading" | "paragraph" | "bulletList" | "numericList",
+  ): string => {
     switch (type) {
       case "heading":
         return "Heading";
@@ -110,7 +158,7 @@ const TextEditor = ({
     }
   };
 
-  const createBlock = () => {
+  const createBlock = (): void => {
     let block: Heading | Paragraph | BulletList;
 
     switch (currentBlockCreationType) {
@@ -126,20 +174,25 @@ const TextEditor = ({
       case "numericList":
         block = new BulletList().upgradeToNumeric();
         break;
+      default:
+        block = new Paragraph();
     }
 
-    block["id"] = blockId + 1;
-
+    block.id = blockId + 1;
     setBlockId(blockId + 1);
 
-    setNotes((notes) => {
-      return [...notes, block];
+    setNotes((prevNotes: Block[]): Block[] => {
+      return [...prevNotes, block as unknown as Block];
     });
   };
 
-  const renderBulletList = (item) => {
+  const renderBulletList = (item: Block): JSX.Element[] => {
+    if (!Array.isArray(item.text)) {
+      return [];
+    }
+
     const style = determineBlockStyle(item.blockType, colors);
-    return item.text.map((bulletPoint) => {
+    return item.text.map((bulletPoint: BulletPoint) => {
       return (
         <Pressable
           key={bulletPoint.id}
@@ -177,7 +230,7 @@ const TextEditor = ({
               textAlignVertical="top"
               multiline={true}
               placeholder="Enter Something"
-              onChangeText={(text) => {
+              onChangeText={(text: string) => {
                 if (!text.includes("\n")) {
                   bulletPoint.text = text;
                   setCurrentInputText(text);
@@ -195,15 +248,15 @@ const TextEditor = ({
                   const parsingNextLineText = text.replace("\n", "");
 
                   bulletPoint.text = parsingNextLineText;
-                  let currentArray = item.text;
-                  const newArray = [];
+                  let currentArray = item.text as BulletPoint[];
+                  const newArray: BulletPoint[] = [];
                   const bulletPointToInsert = new BulletPoint(null, "");
                   let trackId: boolean | number = false;
 
                   for (let index = 0; index < currentArray.length; index++) {
                     newArray.push(currentArray[index]);
                     if (currentArray[index] === bulletPoint) {
-                      const newId = currentArray[index].id + 1;
+                      const newId = currentArray[index].id! + 1;
                       bulletPointToInsert.id = newId;
                       newArray.push(bulletPointToInsert);
                       trackId = newId;
@@ -225,8 +278,8 @@ const TextEditor = ({
                   event.nativeEvent.key === "Backspace" &&
                   bulletPoint.text === ""
                 ) {
-                  let currentArray = item.text;
-                  const newArray = [];
+                  let currentArray = item.text as BulletPoint[];
+                  const newArray: BulletPoint[] = [];
                   let removed = false;
                   let previousBullet: BulletPoint | null = null;
                   let trackId = 1;
@@ -262,7 +315,7 @@ const TextEditor = ({
               onContentSizeChange={(e) => {
                 const newHeight = Math.max(
                   item.textInputHeight,
-                  e.nativeEvent.contentSize.height
+                  e.nativeEvent.contentSize.height,
                 );
                 if (newHeight !== item.textInputHeight) {
                   item.textInputHeight = newHeight;
@@ -270,7 +323,7 @@ const TextEditor = ({
                 }
               }}
               autoFocus={true}
-            ></TextInput>
+            />
           ) : (
             <TextInput
               style={[style, { flex: 1, paddingInline: 10 }]}
@@ -278,14 +331,14 @@ const TextEditor = ({
               value={bulletPoint.text}
               editable={false}
               focusable={false}
-            ></TextInput>
+            />
           )}
         </Pressable>
       );
     });
   };
 
-  const renderBlock = ({ item }) => {
+  const renderBlock = ({ item }: RenderBlockProps): JSX.Element => {
     if (item.blockType === "bulletList" || item.blockType === "numericList") {
       const highlight =
         currentBlockToEdit === item
@@ -329,14 +382,16 @@ const TextEditor = ({
             multiline={true}
             placeholder={`Enter your ${item.blockType}`}
             textAlignVertical="top"
-            onChangeText={(text) => {
-              item.text = text;
-              setCurrentInputText(item.text);
+            onChangeText={(text: string) => {
+              if (typeof item.text === "string") {
+                item.text = text;
+                setCurrentInputText(item.text);
+              }
             }}
             onContentSizeChange={(e) => {
               const newHeight = Math.max(
                 item.textInputHeight,
-                e.nativeEvent.contentSize.height
+                e.nativeEvent.contentSize.height,
               );
               if (newHeight !== item.textInputHeight) {
                 item.textInputHeight = newHeight;
@@ -347,18 +402,20 @@ const TextEditor = ({
           <Text
             onPress={() => {
               setCurrentBlockToEdit(item);
-              setCurrentInputText(item.text);
+              setCurrentInputText(
+                typeof item.text === "string" ? item.text : "",
+              );
             }}
             style={[determineBlockStyle(item.blockType, colors)]}
           >
-            {item.text}
+            {typeof item.text === "string" ? item.text : ""}
           </Text>
         )}
       </View>
     );
   };
 
-  const handleDeleteBlock = () => {
+  const handleDeleteBlock = (): void => {
     const updatedBlocksList = notes.filter((block) => {
       return block !== currentBlockToEdit;
     });
@@ -366,7 +423,7 @@ const TextEditor = ({
     setNotes(updatedBlocksList);
   };
 
-  if (Platform.OS === "web" && fetchCache.current) {
+  if (Platform.OS === "web" && fetchCacheRef.current) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />
@@ -385,12 +442,11 @@ const TextEditor = ({
         <TextInput
           value={notesTitle}
           placeholder="Your Title"
-          // placeholderTextColor={colors.primary}
-          onChangeText={(text) => {
+          onChangeText={(text: string) => {
             setNotesTitle(text);
           }}
           style={styles.title}
-        ></TextInput>
+        />
 
         {/* Blocks List */}
         <FlatList

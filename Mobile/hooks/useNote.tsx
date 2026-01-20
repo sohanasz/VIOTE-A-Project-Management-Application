@@ -2,22 +2,22 @@ import {
   createContext,
   useContext,
   useState,
-  useEffect,
   ReactNode,
   Dispatch,
   SetStateAction,
 } from "react";
 
 type NoteContextType = {
-  setNotes: () => Dispatch<SetStateAction<[]>>;
-  note: {};
-  setNote: () => Dispatch<SetStateAction<[] | null>>;
+  notes: Note[] | null;
+  setNotes: Dispatch<SetStateAction<Note[] | null>>;
+  note: any[];
+  setNote: Dispatch<SetStateAction<any[]>>;
   noteId: string;
-  setNoteId: () => Dispatch<SetStateAction<[] | null>>;
+  setNoteId: Dispatch<SetStateAction<string>>;
   noteTitle: string;
-  setNoteTitle: () => Dispatch<SetStateAction<string>>;
+  setNoteTitle: Dispatch<SetStateAction<string>>;
   updateNoteCB: boolean;
-  setUpdateNoteCB: () => Dispatch<SetStateAction<boolean>>;
+  setUpdateNoteCB: Dispatch<SetStateAction<boolean>>;
 };
 
 const NoteContext = createContext<NoteContextType | undefined>(undefined);
@@ -34,7 +34,7 @@ type Note = {
 
 export function NoteProvider({ children }: { children: ReactNode }) {
   const [notes, setNotes] = useState<Note[] | null>(null);
-  const [note, setNote] = useState<[]>([]);
+  const [note, setNote] = useState<any[]>([]);
   const [noteId, setNoteId] = useState<string>("");
   const [noteTitle, setNoteTitle] = useState<string>("");
   const [updateNoteCB, setUpdateNoteCB] = useState<boolean>(false);
