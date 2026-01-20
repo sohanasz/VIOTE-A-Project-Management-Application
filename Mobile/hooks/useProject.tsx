@@ -11,9 +11,9 @@ import {
 
 type ProjectContextType = {
   project: {} | null;
-  setProject: () => Dispatch<SetStateAction<boolean>>;
+  setProject: Dispatch<SetStateAction<{} | null>>;
   role: string;
-  setRole: () => Dispatch<SetStateAction<boolean>>;
+  setRole: Dispatch<SetStateAction<string>>;
 };
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -21,8 +21,6 @@ const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [project, setProject] = useState<{} | null>(null);
   const [role, setRole] = useState<string>(USER_ROLES.MEMBER);
-
-  useEffect(() => {}, []);
 
   return (
     <ProjectContext.Provider value={{ project, setProject, role, setRole }}>

@@ -8,9 +8,10 @@ import {
   FlatList,
   Platform,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import {
@@ -24,6 +25,8 @@ import {
   Paragraph,
 } from "@/lib/classes/Block";
 import { router } from "expo-router";
+
+const SESSION_KEY = "TEXT_EDITOR_DRAFT";
 
 const TextEditor = ({
   notesTitle,
@@ -44,6 +47,7 @@ const TextEditor = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [documentUpdateRender, setDocumentUpdateRender] = useState(0);
+  const fetchCache = useRef(true);
 
   useEffect(() => {
     if (notes && notes.length > 0) {
@@ -51,6 +55,45 @@ const TextEditor = ({
       setBlockId(lastId);
     }
   }, [notes]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    if (fetchCache.current) return;
+
+    const payload = {
+      notesTitle,
+      notes: Array.isArray(notes) ? notes : [],
+    };
+
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    } catch (e) {
+      console.warn("Failed to save editor draft", e);
+    }
+  }, [notesTitle, notes, documentUpdateRender]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    if (!fetchCache.current) return;
+    fetchCache.current = false;
+
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+
+      if (parsed?.notes && Array.isArray(parsed.notes)) {
+        setNotes(parsed.notes);
+      }
+
+      if (typeof parsed?.notesTitle === "string") {
+        setNotesTitle(parsed.notesTitle);
+      }
+    } catch (e) {
+      console.warn("Failed to restore editor draft", e);
+    }
+  }, []);
 
   const getBlockTypeText = (type) => {
     switch (type) {
@@ -323,6 +366,14 @@ const TextEditor = ({
     setNotes(updatedBlocksList);
   };
 
+  if (Platform.OS === "web" && fetchCache.current) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <KeyboardAvoidingView
@@ -369,9 +420,11 @@ const TextEditor = ({
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => {
+                if (Platform.OS === "web") {
+                  sessionStorage.removeItem(SESSION_KEY);
+                }
                 router.back();
               }}
-              // style={[{ backgroundColor: colors.text }]}
             >
               <Feather name="arrow-left" size={22} color={colors.text} />
             </TouchableOpacity>

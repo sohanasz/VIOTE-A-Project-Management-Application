@@ -34,7 +34,7 @@ type Note = {
 
 export function NoteProvider({ children }: { children: ReactNode }) {
   const [notes, setNotes] = useState<Note[] | null>(null);
-  const [note, setNote] = useState<[] | null>(null);
+  const [note, setNote] = useState<[]>([]);
   const [noteId, setNoteId] = useState<string>("");
   const [noteTitle, setNoteTitle] = useState<string>("");
   const [updateNoteCB, setUpdateNoteCB] = useState<boolean>(false);

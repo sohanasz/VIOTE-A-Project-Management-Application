@@ -13,6 +13,14 @@ export const ProjectStatusEnum = {
 
 export const AvailableProjectStatuses = Object.values(ProjectStatusEnum);
 
+export const NotesPermissionsEnum = {
+  READ: "read",
+  WRITE: "write",
+  ADMIN: "admin",
+};
+
+export const AvailableNotesPermissions = Object.values(NotesPermissionsEnum);
+
 export const TaskStatusEnum = {
   TODO: "todo",
   IN_PROGRESS: "in_progress",

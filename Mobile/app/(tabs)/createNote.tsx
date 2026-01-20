@@ -1,4 +1,4 @@
-import { View, Text, TextInput, TouchableOpacity, Alert } from "react-native";
+import { Platform } from "react-native";
 import { useEffect, useState } from "react";
 import { router } from "expo-router";
 import useTheme from "@/hooks/useTheme";
@@ -6,6 +6,9 @@ import useProject from "@/hooks/useProject";
 import { api } from "@/lib/api";
 import { useNote } from "@/hooks/useNote";
 import TextEditor from "@/components/TextEditor";
+import { showAlert } from "@/lib/showAlert";
+
+const PROJECT_ID_SESSION_KEY = "ACTIVE_PROJECT_ID";
 
 const CreateNote = () => {
   const { colors } = useTheme();
@@ -13,62 +16,105 @@ const CreateNote = () => {
   const { note, setNote, noteTitle, setNoteTitle, updateNoteCB, noteId } =
     useNote();
 
-  const handleSave = async () => {
-    if (!project._id) {
-      Alert.alert(
-        "Notes did not save!",
-        "Please select a project before saving...."
-      );
+  // 🔹 Local projectId state (decoupled from project document)
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
+  /* -----------------------------------------
+     Sync project._id → local state + storage
+  ------------------------------------------ */
+  useEffect(() => {
+    if (!project?._id) return;
+
+    setActiveProjectId(project._id);
+
+    if (Platform.OS === "web") {
+      sessionStorage.setItem(PROJECT_ID_SESSION_KEY, project._id);
+    }
+  }, [project?._id]);
+
+  /* -----------------------------------------
+     Restore projectId on reload (WEB ONLY)
+  ------------------------------------------ */
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    if (activeProjectId) return;
+
+    const cachedId = sessionStorage.getItem(PROJECT_ID_SESSION_KEY);
+    if (cachedId) {
+      setActiveProjectId(cachedId);
+    }
+  }, []);
+
+  /* -----------------------------------------
+     Save new note
+  ------------------------------------------ */
+  const handleSave = async (): Promise<void> => {
+    if (!activeProjectId) {
+      showAlert("Notes not saved", "Please select a project before saving.");
       return;
     }
 
     try {
-      await api.post(`/projects/${project._id}/notes`, {
+      await api.post(`/projects/${activeProjectId}/notes`, {
         title: noteTitle,
         content: note,
       });
+
+      showAlert("Success", "Notes saved successfully");
+
+      if (Platform.OS === "web") {
+        sessionStorage.removeItem(PROJECT_ID_SESSION_KEY);
+      }
+
+      router.back();
     } catch (err) {
       console.error("Failed to save note", err);
-    } finally {
+      showAlert("Error", "Failed to save notes.");
     }
   };
 
-  const handleUpdate = async () => {
-    if (!project._id) {
-      Alert.alert(
-        "Notes did not update!",
-        "Please select a project before saving...."
-      );
+  /* -----------------------------------------
+     Update existing note
+  ------------------------------------------ */
+  const handleUpdate = async (): Promise<void> => {
+    if (!activeProjectId) {
+      showAlert("Notes not updated", "Please select a project before saving.");
       return;
     }
 
     try {
-      const res = await api.put(`/projects/${project._id}/notes/${noteId}`, {
-        title: noteTitle,
-        content: note,
-      });
+      const res = await api.put(
+        `/projects/${activeProjectId}/notes/${noteId}`,
+        {
+          title: noteTitle,
+          content: note,
+        }
+      );
 
       if (res.status === 200) {
-        Alert.alert("Success", "Notes updated successfully");
+        showAlert("Success", "Notes updated successfully");
+
+        if (Platform.OS === "web") {
+          sessionStorage.removeItem(PROJECT_ID_SESSION_KEY);
+        }
+
+        router.back();
       }
     } catch (err) {
-      Alert.alert("Something went wrong", "Notes did not update!");
       console.error("Failed to update note", err);
-    } finally {
+      showAlert("Error", "Notes did not update.");
     }
   };
 
   return (
-    <>
-      <TextEditor
-        onSave={updateNoteCB ? handleUpdate : handleSave}
-        notesTitle={noteTitle}
-        setNotesTitle={setNoteTitle}
-        notes={note}
-        setNotes={setNote}
-        colors={colors}
-      />
-    </>
+    <TextEditor
+      onSave={updateNoteCB ? handleUpdate : handleSave}
+      notesTitle={noteTitle}
+      setNotesTitle={setNoteTitle}
+      notes={note}
+      setNotes={setNote}
+      colors={colors}
+    />
   );
 };
 

@@ -167,6 +167,11 @@ export const createCreateNoteStyles = (colors: ColorScheme) =>
       backgroundColor: colors.border,
       marginHorizontal: 1,
     },
+    center: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
   });
 
 export function determineBlockStyle(blockType: string, colors: ColorScheme) {
